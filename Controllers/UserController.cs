@@ -1,40 +1,47 @@
+using System.Security.Cryptography;
 using AutoMapper;
 using chatbot.Data;
 using chatbot.Dtos;
+using chatbot.Helpers;
 using chatbot.Models;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace chatbot.Controllers
 {
+  // [AllowAnonymous] // This attribute will allow anonymous access to the controller, meaning that no authentication is required to access the controller.
+  [Authorize] // This attribute will require the authentication to take place before the access to any of the controller is provided
   [ApiController]
   [Route("[controller]")]
   public class UserController : ControllerBase
   {
-    DataContextEF dataContextEF;
-    IMapper mapper;
-    public UserController(IConfiguration config)
+    private readonly DataContextEF _dataContextEF; // private means this variable can only be accessed within this class. readonly means that this variable can only be assigned once either at declaration or in the constructor. 
+    private readonly IMapper mapper; // IMapper is an interface that defines a contract for mapping objects from one type to another.
+
+    private readonly AuthHelper _authHelper;
+    public UserController(IConfiguration config, AuthHelper authHelper, DataContextEF dataContextEF)
     {
-      dataContextEF = new DataContextEF(config);
+      _dataContextEF = dataContextEF;
       mapper = new Mapper(
         new MapperConfiguration(
           cfg =>
           { cfg.CreateMap<UserToAddDto, User>(); }
         )
       );
-
+      _authHelper = authHelper;
     }
 
     #region User CRUD
     [HttpGet("GetUsers")] // Read
     public IEnumerable<User> GetUsers()
     {
-      return dataContextEF.Users.ToList();
+      return _dataContextEF.Users.ToList();
     }
 
     [HttpGet("GetUserById/{userId}")] // Read
     public IActionResult GetUserById(int userId)
     {
-      User? user = dataContextEF.Users.Where(u => u.UserId == userId).FirstOrDefault();
+      User? user = _dataContextEF.Users.Where(u => u.UserId == userId).FirstOrDefault();
       if (user != null)
       {
         return Ok(user);
@@ -49,11 +56,11 @@ namespace chatbot.Controllers
     public IActionResult CreateUser(UserToAddDto userToAddDto)
     {
       User user = mapper.Map<User>(userToAddDto);
-      if (!dataContextEF.Users.Any(u => u.Email == userToAddDto.Email))
+      if (!_dataContextEF.Users.Any(u => u.Email == userToAddDto.Email))
       {
-        dataContextEF.Users.Add(user);
+        _dataContextEF.Users.Add(user);
 
-        if (dataContextEF.SaveChanges() > 0)
+        if (_dataContextEF.SaveChanges() > 0)
         {
           return Ok();
         }
@@ -72,7 +79,7 @@ namespace chatbot.Controllers
     [HttpPut("UpdateUser/{userId}")]
     public IActionResult UpdateUser(int userId, UserToUpdateDto userToUpdateDto)
     {
-      User? userToUpdate = dataContextEF.Users.Where(u => u.UserId == userId).FirstOrDefault();
+      User? userToUpdate = _dataContextEF.Users.Where(u => u.UserId == userId).FirstOrDefault();
       if (userToUpdate != null)
       {
         // Only update properties that are provided
@@ -88,7 +95,7 @@ namespace chatbot.Controllers
         if (userToUpdateDto.Gender != null)
           userToUpdate.Gender = userToUpdateDto.Gender;
 
-        if (dataContextEF.SaveChanges() > 0)
+        if (_dataContextEF.SaveChanges() > 0)
         {
           return Ok($"User with ID: {userId} updated successfully.");
         }
@@ -107,12 +114,12 @@ namespace chatbot.Controllers
     [HttpDelete("DeleteUser/{userId}")]
     public IActionResult DeleteUser(int userId)
     {
-      User? userToDelete = dataContextEF.Users.Where(u => u.UserId == userId).FirstOrDefault();
+      User? userToDelete = _dataContextEF.Users.Where(u => u.UserId == userId).FirstOrDefault();
 
       if (userToDelete != null)
       {
-        dataContextEF.Users.Remove(userToDelete);
-        if (dataContextEF.SaveChanges() > 0) return Ok($"User with ID: {userId} deleted successfully.");
+        _dataContextEF.Users.Remove(userToDelete);
+        if (_dataContextEF.SaveChanges() > 0) return Ok($"User with ID: {userId} deleted successfully.");
         else return BadRequest("Failed to delete user.");
       }
       else
@@ -120,6 +127,96 @@ namespace chatbot.Controllers
         return NotFound($"User with ID: {userId} not found.");
       }
     }
+
+    [AllowAnonymous]
+    [HttpPost("Register")] // Register/Create
+    public IActionResult Register(UserForRegistrationDto userForRegistrationDto)
+    {
+      // First check if the passwords match
+      if (userForRegistrationDto.Password == userForRegistrationDto.ConfirmPassword)
+      {
+        // Then check if the user already exists
+        if (!_dataContextEF.Users.Any(u => u.Email == userForRegistrationDto.Email))
+        {
+          // Generate a random salt byte array for password hashing later. It is used later to concatenate with the password before hashing it.
+          byte[] passwordSalt = new byte[128 / 8];
+          using (RandomNumberGenerator rng = RandomNumberGenerator.Create())
+          {
+            rng.GetNonZeroBytes(passwordSalt);
+          }
+          byte[] passwordHash = _authHelper.GetPasswordHash(userForRegistrationDto.Password, passwordSalt);
+
+          User? newUser = new User
+          {
+            FirstName = userForRegistrationDto.FirstName,
+            LastName = userForRegistrationDto.LastName,
+            Email = userForRegistrationDto.Email.ToLower(),
+            Gender = userForRegistrationDto.Gender,
+            PasswordHash = passwordHash,
+            PasswordSalt = passwordSalt,
+            CreatedAt = DateTime.UtcNow
+          };
+
+          _dataContextEF.Users.Add(newUser);
+          if (_dataContextEF.SaveChanges() > 0)
+          {
+            return Ok("User registered successfully.");
+          }
+          else
+          {
+            return BadRequest("Failed to register user.");
+          }
+        }
+        else
+        {
+          return BadRequest("User already exists with the same email.");
+        }
+      }
+      else
+      {
+        return BadRequest("Passwords do not match.");
+      }
+    }
+
+    [AllowAnonymous]
+    [HttpPost("Login")]
+    public IActionResult Login(UserForLoginDto userForLoginDto)
+    {
+      // Check if the user exists
+      User? user = _dataContextEF.Users.FirstOrDefault(u => u.Email == userForLoginDto.Email.ToLower());
+      if (user != null)
+      {
+        byte[] inputPasswordHash = _authHelper.GetPasswordHash(userForLoginDto.Password, user.PasswordSalt);
+
+        // Check if the password hash matches the stored password hash
+        for (int i = 0; i < inputPasswordHash.Length; i++)
+        {
+          if (inputPasswordHash[i] != user.PasswordHash[i])
+          {
+            return Unauthorized("Invalid credentials");
+          }
+        }
+
+        // If the password matches, return the user details (excluding password)
+        // Create JWT token using user's ID
+        string token = _authHelper.CreateToken(user.UserId);
+
+        // Return token and optionally some user details
+        return Ok(new
+        {
+          Token = token,
+          UserId = user.UserId,
+          Email = user.Email,
+          FirstName = user.FirstName,
+          LastName = user.LastName
+        });
+      }
+      else
+      {
+        return NotFound("User not found.");
+      }
+    }
+
 
 
 
