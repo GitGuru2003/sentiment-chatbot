@@ -154,6 +154,7 @@ namespace chatbot.Controllers
             Gender = userForRegistrationDto.Gender,
             PasswordHash = passwordHash,
             PasswordSalt = passwordSalt,
+            Role = userForRegistrationDto.Role,
             CreatedAt = DateTime.UtcNow
           };
 
@@ -244,6 +245,18 @@ namespace chatbot.Controllers
         { "token", newToken }
     });
     }
+
+    #region Authorization
+
+
+    [HttpGet("AdminOnly")]
+    [Authorize(Roles = "Admin")]
+    public IActionResult AdminOnly()
+    {
+      return Ok("This is an admin-only endpoint.");
+    }
+
+    #endregion
 
 
     #endregion
