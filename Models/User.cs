@@ -10,6 +10,7 @@ namespace chatbot.Models
     public byte[] PasswordHash { get; set; }
     public byte[] PasswordSalt { get; set; }
     public DateTime CreatedAt { get; set; }
+    public string Role { get; set; }
 
     public ICollection<ChatMessage> ChatMessages { get; set; }
 
@@ -19,6 +20,7 @@ namespace chatbot.Models
       LastName = "";
       Email = "";
       Gender = "";
+      Role = "User";
       PasswordHash = new byte[0];
       PasswordSalt = new byte[0];
       CreatedAt = DateTime.UtcNow;

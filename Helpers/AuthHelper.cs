@@ -32,9 +32,15 @@ namespace chatbot.Helpers
 
     public string CreateToken(int userId)
     {
-      Claim[] claims = new Claim[]{
-        new Claim("userId", userId.ToString()) // "userId" is the identifier for the claim and userId.ToString() is the value of the claim.
+      // Claim[] claims = new Claim[]{
+      //   new Claim("userId", userId.ToString()) // "userId" is the identifier for the claim and userId.ToString() is the value of the claim.
+      // };
+      Claim[] claims = new Claim[]
+      {
+          new Claim("userId", userId.ToString()),
+          new Claim(JwtRegisteredClaimNames.Iat, DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString(), ClaimValueTypes.Integer64)
       };
+
 
       string? tokenKey = _config.GetSection("AppSettings:TokenKey").Value;
 
@@ -45,14 +51,14 @@ namespace chatbot.Helpers
       );
 
         SigningCredentials credentials = new SigningCredentials(
-          symmetricKey, SecurityAlgorithms.HmacSha512
+          symmetricKey, SecurityAlgorithms.HmacSha256
         );
 
         SecurityTokenDescriptor tokenDescriptor = new SecurityTokenDescriptor()
         {
           Subject = new ClaimsIdentity(claims),
           SigningCredentials = credentials,
-          Expires = DateTime.Now.AddDays(1)
+          Expires = DateTime.UtcNow.AddDays(1)
         };
 
         JwtSecurityTokenHandler tokenHandler = new JwtSecurityTokenHandler();

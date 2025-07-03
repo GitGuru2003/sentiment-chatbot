@@ -10,7 +10,6 @@ using Microsoft.AspNetCore.Mvc;
 namespace chatbot.Controllers
 {
   // [AllowAnonymous] // This attribute will allow anonymous access to the controller, meaning that no authentication is required to access the controller.
-  [Authorize] // This attribute will require the authentication to take place before the access to any of the controller is provided
   [ApiController]
   [Route("[controller]")]
   public class UserController : ControllerBase
@@ -32,6 +31,7 @@ namespace chatbot.Controllers
     }
 
     #region User CRUD
+    [Authorize]
     [HttpGet("GetUsers")] // Read
     public IEnumerable<User> GetUsers()
     {
@@ -128,7 +128,7 @@ namespace chatbot.Controllers
       }
     }
 
-    [AllowAnonymous]
+
     [HttpPost("Register")] // Register/Create
     public IActionResult Register(UserForRegistrationDto userForRegistrationDto)
     {
@@ -178,7 +178,7 @@ namespace chatbot.Controllers
       }
     }
 
-    [AllowAnonymous]
+
     [HttpPost("Login")]
     public IActionResult Login(UserForLoginDto userForLoginDto)
     {
@@ -195,6 +195,10 @@ namespace chatbot.Controllers
           {
             return Unauthorized("Invalid credentials");
           }
+          // if (!inputPasswordHash.SequenceEqual(user.PasswordHash))
+          // {
+          //   return Unauthorized("Invalid credentials");
+          // }
         }
 
         // If the password matches, return the user details (excluding password)
@@ -217,7 +221,33 @@ namespace chatbot.Controllers
       }
     }
 
+    [Authorize]
+    [HttpGet("RefreshToken")]
+    public IActionResult RefreshToken()
+    {
+      // Extract userId from the JWT claims
+      string? userIdClaim = User.FindFirst("userId")?.Value;
 
+      if (string.IsNullOrEmpty(userIdClaim) || !int.TryParse(userIdClaim, out int userId))
+      {
+        return Unauthorized("Invalid token. Cannot extract user ID.");
+      }
+
+      // Optionally: validate that the user still exists in the database
+      var userExists = _dataContextEF.Users.Any(u => u.UserId == userId);
+      if (!userExists)
+      {
+        return NotFound("User no longer exists.");
+      }
+
+      // Generate new token
+      string newToken = _authHelper.CreateToken(userId);
+
+      return Ok(new Dictionary<string, string>
+    {
+        { "token", newToken }
+    });
+    }
 
 
     #endregion
