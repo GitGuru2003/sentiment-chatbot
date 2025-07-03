@@ -195,15 +195,11 @@ namespace chatbot.Controllers
           {
             return Unauthorized("Invalid credentials");
           }
-          // if (!inputPasswordHash.SequenceEqual(user.PasswordHash))
-          // {
-          //   return Unauthorized("Invalid credentials");
-          // }
         }
 
         // If the password matches, return the user details (excluding password)
         // Create JWT token using user's ID
-        string token = _authHelper.CreateToken(user.UserId);
+        string token = _authHelper.CreateToken(user.UserId, user.Role);
 
         // Return token and optionally some user details
         return Ok(new
@@ -233,15 +229,15 @@ namespace chatbot.Controllers
         return Unauthorized("Invalid token. Cannot extract user ID.");
       }
 
-      // Optionally: validate that the user still exists in the database
-      var userExists = _dataContextEF.Users.Any(u => u.UserId == userId);
-      if (!userExists)
+      // Getting the user to check if they exist and to get their role
+      User? user = _dataContextEF.Users.FirstOrDefault(u => u.UserId == userId);
+      if (user == null)
       {
         return NotFound("User no longer exists.");
       }
 
       // Generate new token
-      string newToken = _authHelper.CreateToken(userId);
+      string newToken = _authHelper.CreateToken(userId, user.Role);
 
       return Ok(new Dictionary<string, string>
     {

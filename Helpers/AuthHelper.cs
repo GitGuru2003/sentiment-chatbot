@@ -30,7 +30,7 @@ namespace chatbot.Helpers
       return passwordHash;
     }
 
-    public string CreateToken(int userId)
+    public string CreateToken(int userId, string role)
     {
       // Claim[] claims = new Claim[]{
       //   new Claim("userId", userId.ToString()) // "userId" is the identifier for the claim and userId.ToString() is the value of the claim.
@@ -38,7 +38,8 @@ namespace chatbot.Helpers
       Claim[] claims = new Claim[]
       {
           new Claim("userId", userId.ToString()),
-          new Claim(JwtRegisteredClaimNames.Iat, DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString(), ClaimValueTypes.Integer64)
+          new Claim(JwtRegisteredClaimNames.Iat, DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString(), ClaimValueTypes.Integer64),
+          new Claim(ClaimTypes.Role, role)
       };
 
 
